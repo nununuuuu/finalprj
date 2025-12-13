@@ -29,11 +29,11 @@ class SmaRsiStrategy(Strategy):
     
     # 進場 RSI 參數
     n_rsi_entry = 14
-    rsi_buy_threshold = 30 # [修正] 預設 30
+    rsi_buy_threshold = 70 
     
     # 出場 RSI 參數
     n_rsi_exit = 14
-    rsi_sell_threshold = 70 # [修正] 預設 70
+    rsi_sell_threshold = 80 
     
     sl_pct = 0.0
     tp_pct = 0.0
