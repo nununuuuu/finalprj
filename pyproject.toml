@@ -1,5 +1,5 @@
 [project]
-name = "trading-backtester"  # 這裡是你報錯訊息裡的專案名稱
+name = "trading-backtester" 
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"

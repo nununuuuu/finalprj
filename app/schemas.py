@@ -9,7 +9,7 @@ class BacktestRequest(BaseModel):
     ma_short: int = 10
     ma_long: int = 60
     
-    # --- RSI 進階設定 (修正預設值) ---
+    # RSI 分離設定
     rsi_period_entry: int = 14    
     rsi_buy_threshold: int = 70   
     
@@ -31,6 +31,10 @@ class BacktestResponse(BaseModel):
     total_trades: int
     avg_pnl: float
     max_consecutive_loss: int
+    
+    # [新增] 詳細指標
+    max_drawdown: float
+    sharpe_ratio: float
     
     equity_curve: List[Dict]
     price_data: List[Dict]
