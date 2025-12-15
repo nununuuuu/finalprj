@@ -5,16 +5,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>智慧投資回測系統</title>
+
+    <!-- 1. Tailwind 設定 -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            bg: '#0f172a',      // slate-900
+                            card: '#1e293b',    // slate-800
+                            border: '#334155'   // slate-700
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+
+    <!-- 2. 防閃爍腳本 -->
+    <script>
+        if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+
     <style>
         body {
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
         }
 
-        /* 自定義卷軸樣式 (讓介面看起來更像 App) */
+        /* 卷軸適配深色模式 */
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -32,29 +61,82 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background-color: #94a3b8;
         }
+
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #475569;
+        }
+
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background-color: #64748b;
+        }
     </style>
 </head>
 
-<body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
+<body
+    class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 h-screen flex flex-col overflow-hidden transition-colors duration-200">
 
-    <!-- 頂部導航欄 (固定高度 h-14) -->
-    <nav class="bg-white border-b border-gray-200 shadow-sm z-50 h-14 flex-shrink-0">
+    <nav
+        class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 shadow-sm z-50 h-14 flex-shrink-0 transition-colors duration-200">
         <div class="h-full px-4 flex items-center justify-between">
             <div class="flex items-center gap-2">
-                <h1 class="text-lg font-bold text-gray-800 tracking-tight">BacktestSystem</h1>
+                <h1 class="text-lg font-bold text-gray-800 dark:text-white tracking-tight">BacktestSystem</h1>
             </div>
-            <div class="text-xs text-gray-400">
-                BETA
-            </div>
+
+            <!-- 切換按鈕 -->
+            <button id="theme-toggle" type="button"
+                class="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none rounded-lg text-sm p-2.5 transition-colors">
+                <svg id="theme-toggle-light-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                        d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 100 2h1z"
+                        fill-rule="evenodd" clip-rule="evenodd"></path>
+                </svg>
+                <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                </svg>
+            </button>
         </div>
     </nav>
 
-    <!-- 主要內容區 (佔滿剩餘高度) -->
-    <!-- 移除 container mx-auto，改為 w-full -->
     <main class="flex-grow w-full flex overflow-hidden">
         {% block content %}{% endblock %}
     </main>
 
+    <script>
+        var themeToggleDarkIcon = document.getElementById('theme-toggle-dark-icon');
+        var themeToggleLightIcon = document.getElementById('theme-toggle-light-icon');
+
+        if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            themeToggleLightIcon.classList.remove('hidden');
+        } else {
+            themeToggleDarkIcon.classList.remove('hidden');
+        }
+
+        var themeToggleBtn = document.getElementById('theme-toggle');
+        themeToggleBtn.addEventListener('click', function () {
+            themeToggleDarkIcon.classList.toggle('hidden');
+            themeToggleLightIcon.classList.toggle('hidden');
+
+            if (localStorage.getItem('color-theme')) {
+                if (localStorage.getItem('color-theme') === 'light') {
+                    document.documentElement.classList.add('dark');
+                    localStorage.setItem('color-theme', 'dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.setItem('color-theme', 'light');
+                }
+            } else {
+                if (document.documentElement.classList.contains('dark')) {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.setItem('color-theme', 'light');
+                } else {
+                    document.documentElement.classList.add('dark');
+                    localStorage.setItem('color-theme', 'dark');
+                }
+            }
+            // 觸發自定義事件通知圖表更新
+            window.dispatchEvent(new Event('themeChanged'));
+        });
+    </script>
 </body>
 
 </html>
