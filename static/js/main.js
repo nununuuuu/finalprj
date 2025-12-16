@@ -2,11 +2,21 @@
 
 let mainChart = null;
 let lockedDataset = null;
-// 保存最近一次的圖表數據，以便切換主題時重繪
 let lastChartData = null;
 
 document.addEventListener('DOMContentLoaded', function () {
-    console.log("System Ready: Smart Investment Dashboard v1.9 (Dark Mode Ready)");
+    console.log("System Ready: Smart Investment Dashboard v2.3 (Axis Labels Fixed)");
+
+    // 1. 日期初始化
+    const formatDate = (date) => {
+        const d = new Date(date);
+        let month = '' + (d.getMonth() + 1);
+        let day = '' + d.getDate();
+        const year = d.getFullYear();
+        if (month.length < 2) month = '0' + month;
+        if (day.length < 2) day = '0' + day;
+        return [year, month, day].join('-');
+    };
 
     const today = new Date();
     const start = new Date();
@@ -16,24 +26,18 @@ document.addEventListener('DOMContentLoaded', function () {
     const startDateInput = document.getElementById('start_date');
 
     if (endDateInput && startDateInput) {
-        endDateInput.value = today.toISOString().split('T')[0];
-        startDateInput.value = start.toISOString().split('T')[0];
+        endDateInput.value = formatDate(today);
+        startDateInput.value = formatDate(start);
     }
 
     const tickerInput = document.getElementById('ticker');
-    if (tickerInput) {
-        tickerInput.addEventListener('input', handleTickerInput);
-    }
+    if (tickerInput) tickerInput.addEventListener('input', handleTickerInput);
 
     const lockBtn = document.getElementById('lockBtn');
-    if (lockBtn) {
-        lockBtn.addEventListener('click', handleLockChart);
-    }
+    if (lockBtn) lockBtn.addEventListener('click', handleLockChart);
 
-    // 監聽主題切換事件
     window.addEventListener('themeChanged', function () {
         if (lastChartData) {
-            // 稍微延遲以等待 CSS 變數更新
             setTimeout(() => {
                 renderMainChart(lastChartData.priceData, lastChartData.trades, lastChartData.equityData, lastChartData.bhData);
             }, 50);
@@ -64,7 +68,6 @@ async function executeBacktest() {
     console.log("Backtest started...");
     const tickerInput = document.getElementById('ticker');
     const ticker = tickerInput.value.trim();
-
     if (!ticker) { alert("請輸入股票代碼！"); return; }
 
     const btn = document.getElementById('runBtn');
@@ -121,7 +124,6 @@ async function executeBacktest() {
 
 function updateDashboard(data) {
     updateCard('res_total_return', data.total_return, true);
-
     const bhEl = document.getElementById('res_bh_return');
     bhEl.innerText = (data.buy_and_hold_return > 0 ? '+' : '') + data.buy_and_hold_return + '%';
     bhEl.className = "text-3xl font-bold mt-1 " + (data.buy_and_hold_return > 0 ? "text-teal-600 dark:text-teal-400" : (data.buy_and_hold_return < 0 ? "text-red-500 dark:text-red-400" : "text-gray-300 dark:text-gray-600"));
@@ -134,25 +136,15 @@ function updateDashboard(data) {
     winRateEl.classList.add('text-gray-900', 'dark:text-white');
     document.getElementById('res_trades').innerText = data.total_trades;
 
-    const trEl = document.getElementById('tbl_total_return');
-    trEl.innerText = (data.total_return > 0 ? '+' : '') + data.total_return + '%';
-    trEl.className = "p-3 font-bold text-right " + (data.total_return >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400");
-
-    const annEl = document.getElementById('tbl_ann_return');
-    annEl.innerText = (data.annual_return > 0 ? '+' : '') + data.annual_return + '%';
-    annEl.className = "p-3 font-bold text-right " + (data.annual_return >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400");
-
-    const sharpeEl = document.getElementById('tbl_sharpe');
-    sharpeEl.innerText = data.sharpe_ratio;
-    sharpeEl.className = "p-3 font-bold text-right " + (data.sharpe_ratio >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400");
+    updateTableValue('tbl_total_return', data.total_return, true);
+    updateTableValue('tbl_ann_return', data.annual_return, true);
+    updateTableValue('tbl_sharpe', data.sharpe_ratio, true);
 
     const mddEl = document.getElementById('tbl_mdd');
     mddEl.innerText = Math.abs(data.max_drawdown) + '%';
     mddEl.className = "p-3 font-bold text-right text-red-500 dark:text-red-400";
 
-    const winEl = document.getElementById('tbl_win_rate');
-    winEl.innerText = data.win_rate + '%';
-    winEl.className = "p-3 font-bold text-right " + (data.win_rate >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400");
+    updateTableValue('tbl_win_rate', data.win_rate, true);
 
     const pnlEl = document.getElementById('res_avg_pnl');
     const pnlVal = data.avg_pnl;
@@ -160,9 +152,7 @@ function updateDashboard(data) {
     pnlEl.innerText = `${sign}${pnlVal.toLocaleString()}`;
     pnlEl.className = "p-3 font-bold text-right " + (pnlVal >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400");
 
-    const lossEl = document.getElementById('res_consec_loss');
-    lossEl.innerText = data.max_consecutive_loss + " 次";
-    lossEl.className = "p-3 font-bold text-right text-gray-900 dark:text-white";
+    document.getElementById('res_consec_loss').innerText = data.max_consecutive_loss + " 次";
 
     document.getElementById('chartPlaceholder').classList.add('hidden');
     const canvas = document.getElementById('mainChart');
@@ -170,7 +160,6 @@ function updateDashboard(data) {
     document.getElementById('chartContainer').classList.remove('bg-gray-50', 'border', 'border-dashed');
     document.getElementById('chartContainer').classList.add('bg-white', 'dark:bg-slate-800');
 
-    // 儲存數據供重繪使用
     lastChartData = {
         priceData: data.price_data,
         trades: data.trades,
@@ -194,60 +183,94 @@ function updateCard(id, value, isPct) {
     else el.classList.add("text-gray-300", "dark:text-gray-600");
 }
 
+function updateTableValue(id, value, isGreenRed) {
+    const el = document.getElementById(id);
+    const prefix = (value > 0) ? '+' : '';
+    const suffix = (id.includes('rate') || id.includes('return')) ? '%' : '';
+    el.innerText = prefix + value + suffix;
+    if (isGreenRed) {
+        el.className = "p-3 font-bold text-right " + (value >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400");
+    }
+}
+
+// =========================================================
+//  核心圖表：雙軸標題完整版
+// =========================================================
 function renderMainChart(priceData, trades, equityData, bhData) {
     const ctx = document.getElementById('mainChart').getContext('2d');
     if (mainChart) mainChart.destroy();
 
-    // 判斷當前是否為深色模式
     const isDark = document.documentElement.classList.contains('dark');
-    const textColor = isDark ? '#e2e8f0' : '#1f2937'; // slate-200 vs gray-800
-    const gridColor = isDark ? '#334155' : '#e5e7eb'; // slate-700 vs gray-200
+    const textColor = isDark ? '#e2e8f0' : '#1f2937';
+    const gridColor = isDark ? '#334155' : '#e5e7eb';
+    // 左軸標題顏色 (灰色系，與股價線對應)
+    const leftAxisColor = isDark ? '#94a3b8' : '#64748b';
 
     const labels = priceData.map(d => d.time);
 
+    // 計算報酬率 %
+    const initialEquity = equityData.length > 0 ? equityData[0].value : 1;
+    const strategyReturnData = equityData.map(d => ((d.value - initialEquity) / initialEquity) * 100);
+
+    const initialPrice = priceData.length > 0 ? priceData[0].value : 1;
+    const bhReturnData = priceData.map(d => ((d.value - initialPrice) / initialPrice) * 100);
+
+    // 交易查表
+    const tradeMap = {};
+    trades.forEach(t => { tradeMap[t.time] = { price: t.price, type: t.type }; });
+
+    // 買賣點 (黏在右軸策略線上)
+    const buyMarkers = labels.map((date, index) => {
+        const t = tradeMap[date];
+        return (t && t.type === 'buy') ? strategyReturnData[index] : null;
+    });
+
+    const sellMarkers = labels.map((date, index) => {
+        const t = tradeMap[date];
+        return (t && t.type === 'sell') ? strategyReturnData[index] : null;
+    });
+
     const strategyDataset = {
-        label: '當前策略',
-        data: equityData.map(d => d.value),
-        borderColor: '#3b82f6', // blue-500
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, yAxisID: 'y'
+        label: '目前策略 (%)', data: strategyReturnData,
+        borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true,
+        yAxisID: 'y1', order: 1
     };
 
     const bhDataset = {
-        label: '買進並持有(B&H)',
-        data: bhData ? bhData.map(d => d.value) : [],
-        borderColor: '#9ca3af', // gray-400
-        borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false, yAxisID: 'y'
+        label: '買入持有 (%)', data: bhReturnData,
+        borderColor: '#9ca3af', borderWidth: 2, borderDash: [5, 5],
+        pointRadius: 0, tension: 0.1, fill: false,
+        yAxisID: 'y1', order: 2
     };
 
-    const buyMarkers = equityData.map(d => {
-        const trade = trades.find(tr => tr.time === d.time && tr.type === 'buy');
-        return trade ? d.value : null;
-    });
+    const priceDataset = {
+        label: '股價 (Price)', data: priceData.map(d => d.value),
+        borderColor: isDark ? '#475569' : '#e2e8f0', // 淡色背景
+        borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false,
+        yAxisID: 'y', order: 3
+    };
+
     const buyDataset = {
         label: '買進訊號', data: buyMarkers,
         borderColor: '#ef4444', backgroundColor: '#ef4444',
-        pointStyle: 'circle', pointRadius: 6, pointHoverRadius: 8,
-        type: 'scatter', yAxisID: 'y'
+        pointStyle: 'triangle', rotation: 0, pointRadius: 6, pointHoverRadius: 8,
+        type: 'scatter', yAxisID: 'y1', order: 0
     };
 
-    const sellMarkers = equityData.map(d => {
-        const trade = trades.find(tr => tr.time === d.time && tr.type === 'sell');
-        return trade ? d.value : null;
-    });
     const sellDataset = {
         label: '賣出訊號', data: sellMarkers,
         borderColor: '#10b981', backgroundColor: '#10b981',
-        pointStyle: 'circle', pointRadius: 6, pointHoverRadius: 8,
-        type: 'scatter', yAxisID: 'y'
+        pointStyle: 'triangle', rotation: 180, pointRadius: 6, pointHoverRadius: 8,
+        type: 'scatter', yAxisID: 'y1', order: 0
     };
 
-    let datasets = [];
-    datasets.push(strategyDataset);
-    if (lockedDataset) datasets.push(lockedDataset);
-    datasets.push(bhDataset);
-    datasets.push(buyDataset);
-    datasets.push(sellDataset);
+    let datasets = [strategyDataset, bhDataset, priceDataset, buyDataset, sellDataset];
+
+    if (lockedDataset) {
+        lockedDataset.yAxisID = 'y1';
+        datasets.push(lockedDataset);
+    }
 
     mainChart = new Chart(ctx, {
         type: 'line',
@@ -255,16 +278,30 @@ function renderMainChart(priceData, trades, equityData, bhData) {
         options: {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
+            stacked: false,
             scales: {
                 x: {
                     ticks: { maxTicksLimit: 12, color: textColor },
                     grid: { color: gridColor }
                 },
-                y: {
-                    display: true, position: 'right',
-                    title: { display: true, text: '資產價值', color: textColor },
-                    ticks: { color: textColor },
-                    grid: { color: gridColor }
+                y: { // 左軸: 股價
+                    type: 'linear', display: true, position: 'left',
+                    // --- [新增] 左軸標題 ---
+                    title: {
+                        display: true,
+                        text: '股價 (Price)',
+                        color: leftAxisColor,
+                        font: { weight: 'bold' }
+                    },
+                    // ---------------------
+                    ticks: { color: leftAxisColor },
+                    grid: { display: false }
+                },
+                y1: { // 右軸: 報酬率
+                    type: 'linear', display: true, position: 'right',
+                    title: { display: true, text: '累積報酬率 (%)', color: leftAxisColor, font: { weight: 'bold' } },
+                    ticks: { color: textColor, callback: (v) => v + '%' },
+                    grid: { color: gridColor, drawOnChartArea: true }
                 }
             },
             plugins: {
@@ -273,15 +310,31 @@ function renderMainChart(priceData, trades, equityData, bhData) {
                     callbacks: {
                         label: function (context) {
                             let label = context.dataset.label || '';
+                            if (label.includes('訊號')) {
+                                const date = context.label;
+                                const t = tradeMap[date];
+                                if (t) {
+                                    return `${label}: $${t.price} (於報酬率 ${context.parsed.y.toFixed(2)}% 時)`;
+                                }
+                            }
                             if (label) { label += ': '; }
                             if (context.parsed.y !== null) {
-                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                                if (context.dataset.yAxisID === 'y1') {
+                                    const val = context.parsed.y;
+                                    const sign = val > 0 ? '+' : '';
+                                    label += sign + val.toFixed(2) + '%';
+                                } else {
+                                    label += context.parsed.y.toFixed(2);
+                                }
                             }
                             return label;
                         }
                     }
                 },
-                zoom: { zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }, pan: { enabled: true, mode: 'x' } }
+                zoom: {
+                    zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+                    pan: { enabled: true, mode: 'x' }
+                }
             }
         }
     });
@@ -366,12 +419,13 @@ function renderTradeList(trades) {
 
 function handleLockChart() {
     if (!mainChart) { alert("請先執行回測再鎖定！"); return; }
-    const currentDs = mainChart.data.datasets.find(d => d.label === '當前策略');
+    const currentDs = mainChart.data.datasets.find(d => d.label === '目前策略 (%)');
     if (!currentDs) return;
     lockedDataset = {
-        label: '策略 A (已鎖定)', data: [...currentDs.data],
+        label: '已鎖定策略 (%)', data: [...currentDs.data],
         borderColor: '#FF5809', backgroundColor: 'rgba(255, 88, 9, 0.1)',
-        borderWidth: 2, pointRadius: 0, tension: 0.1, yAxisID: 'y'
+        borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false,
+        yAxisID: 'y1', order: 1
     };
     const lockBtn = document.getElementById('lockBtn');
     lockBtn.classList.remove('bg-blue-50', 'text-blue-600', 'border-blue-100', 'dark:bg-blue-900/30', 'dark:text-blue-400', 'dark:border-blue-800');
