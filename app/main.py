@@ -12,7 +12,7 @@ from functools import lru_cache
 import traceback
 import numpy as np
 import math
-import os  # 新增 os 模組
+import os
 
 # --- 相容性補丁 ---
 if not hasattr(pd.Series, 'iteritems'):
@@ -21,7 +21,7 @@ if not hasattr(np, 'float'):
     np.float = float
 # ----------------
 
-from .strategy import SmaRsiStrategy
+from .strategy import UniversalStrategy
 from .schemas import BacktestRequest, BacktestResponse
 
 app = FastAPI()
@@ -30,15 +30,13 @@ app = FastAPI()
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
-DATA_DIR = BASE_DIR / "data"  # [新增] 定義數據資料夾路徑
+DATA_DIR = BASE_DIR / "data"
 
-# [新增] 確保 data 資料夾存在
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# 數值安全轉換
 def safe_num(value, decimal=2):
     try:
         if hasattr(value, "item"): value = value.item()
@@ -47,7 +45,6 @@ def safe_num(value, decimal=2):
     except Exception:
         return 0.0
 
-# 全域錯誤處理
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"❌ [CRITICAL ERROR] {str(exc)}")
@@ -58,7 +55,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 def _download_from_yahoo(ticker: str, start: str, end: str):
     print(f"📥 [YFinance] 下載: {ticker}")
     try:
-        # 下載數據
         return yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
     except Exception:
         return pd.DataFrame()
@@ -69,12 +65,14 @@ async def get_yfinance_data(ticker: str, start: str, end: str):
     
     loop = asyncio.get_event_loop()
     try:
-        # 非同步下載
         df = await loop.run_in_executor(None, _download_from_yahoo, ticker, start, end)
         if df is None or df.empty: return None, ticker
         
-        # --- 數據清洗 ---
-        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+        if isinstance(df.columns, pd.MultiIndex): 
+            df.columns = df.columns.get_level_values(0)
+        
+        df.columns = [c if isinstance(c, str) else c[0] for c in df.columns]
+
         if df.index.tz is not None: df.index = df.index.tz_localize(None)
         if 'Adj Close' in df.columns and 'Close' not in df.columns: df.rename(columns={'Adj Close': 'Close'}, inplace=True)
         
@@ -82,17 +80,9 @@ async def get_yfinance_data(ticker: str, start: str, end: str):
         if not all(col in df.columns for col in required): return None, ticker
         
         df = df.ffill().bfill()
-
-        # ==========================================
-        # 將數據保存為 CSV
-        # ==========================================
-        csv_filename = f"{ticker}.csv"
-        csv_path = DATA_DIR / csv_filename
         
-        # 保存 CSV (包含 Index 即日期)
+        csv_path = DATA_DIR / f"{ticker}.csv"
         df.to_csv(csv_path)
-        print(f"💾 數據已保存至: {csv_path}")
-        # ==========================================
         
         return df, ticker
     except Exception as e:
@@ -103,6 +93,61 @@ async def get_yfinance_data(ticker: str, start: str, end: str):
 def read_root(request: Request):
     return templates.TemplateResponse("dashboard.html", {"request": request})
 
+# 輔助：根據策略設定嘗試抓取數值字串
+def get_indicator_note(strategy, strat_name, strat_params, idx):
+    if not strat_name: return ""
+    try:
+        if 'SMA' in strat_name:
+            n_s = int(strat_params.get('n_short', 0))
+            n_l = int(strat_params.get('n_long', 0))
+            val_s = getattr(strategy, f"SMA_{n_s}", [])
+            val_l = getattr(strategy, f"SMA_{n_l}", [])
+            v1 = safe_num(val_s[idx]) if len(val_s) > idx else 0
+            v2 = safe_num(val_l[idx]) if len(val_l) > idx else 0
+            return f"SMA({n_s}):{v1} / SMA({n_l}):{v2}"
+            
+        elif 'RSI' in strat_name:
+            p = int(strat_params.get('period', 14))
+            val = getattr(strategy, f"RSI_{p}", [])
+            v = safe_num(val[idx]) if len(val) > idx else 0
+            return f"RSI({p}):{v}"
+            
+        elif 'MACD' in strat_name:
+            # MACD 比較特別，回傳的是 tuple (macd, sig)
+            p_f = int(strat_params.get('fast', 12))
+            p_s = int(strat_params.get('slow', 26))
+            p_sig = int(strat_params.get('signal', 9))
+            key = f"MACD_{p_f}_{p_s}_{p_sig}"
+            if hasattr(strategy, key):
+                macd_data = getattr(strategy, key)
+                # macd_data 是 (array, array)
+                m_val = safe_num(macd_data[0][idx]) if len(macd_data[0]) > idx else 0
+                s_val = safe_num(macd_data[1][idx]) if len(macd_data[1]) > idx else 0
+                return f"MACD:{m_val} / Sig:{s_val}"
+                
+        elif 'KD' in strat_name:
+            p = int(strat_params.get('period', 9))
+            key = f"KD_{p}"
+            if hasattr(strategy, key):
+                kd_data = getattr(strategy, key)
+                k_val = safe_num(kd_data[0][idx]) if len(kd_data[0]) > idx else 0
+                d_val = safe_num(kd_data[1][idx]) if len(kd_data[1]) > idx else 0
+                return f"K:{k_val} / D:{d_val}"
+
+        elif 'BB' in strat_name:
+            p = int(strat_params.get('period', 20))
+            std = strat_params.get('std', 2.0)
+            key = f"BB_{p}_{std}"
+            if hasattr(strategy, key):
+                bb_data = getattr(strategy, key)
+                u_val = safe_num(bb_data[0][idx]) if len(bb_data[0]) > idx else 0
+                l_val = safe_num(bb_data[1][idx]) if len(bb_data[1]) > idx else 0
+                return f"Upper:{u_val} / Lower:{l_val}"
+
+    except Exception:
+        return ""
+    return strat_name
+
 @app.post("/api/backtest", response_model=BacktestResponse)
 async def run_backtest(params: BacktestRequest):
     df, real_ticker = await get_yfinance_data(params.ticker, params.start_date, params.end_date)
@@ -110,21 +155,52 @@ async def run_backtest(params: BacktestRequest):
     if df is None or df.empty:
         raise HTTPException(status_code=404, detail="找不到數據")
 
-    min_bars = max(params.ma_long, 60)
+    min_bars = 60
     if len(df) < min_bars:
         raise HTTPException(status_code=400, detail=f"數據不足 {min_bars} 筆")
 
-    bt = Backtest(df, SmaRsiStrategy, cash=params.cash, commission=((params.buy_fee_pct + params.sell_fee_pct)/2)/100)
-    
-    stats = bt.run(
-        n1=params.ma_short, n2=params.ma_long, 
-        n_rsi_entry=params.rsi_period_entry, rsi_buy_threshold=params.rsi_buy_threshold,
-        n_rsi_exit=params.rsi_period_exit, rsi_sell_threshold=params.rsi_sell_threshold,
-        sl_pct=params.stop_loss_pct, tp_pct=params.take_profit_pct
+    # trade_on_close=False (預設隔日開盤成交)
+    bt = Backtest(
+        df, 
+        UniversalStrategy, 
+        cash=params.cash, 
+        commission=((params.buy_fee_pct + params.sell_fee_pct)/2)/100
     )
+    
+    strat_kwargs = {
+        'mode': params.strategy_mode,
+        'sl_pct': params.stop_loss_pct,
+        'tp_pct': params.take_profit_pct
+    }
+
+    if params.strategy_mode == 'basic':
+        strat_kwargs.update({
+            'n1': params.ma_short,
+            'n2': params.ma_long,
+            'n_rsi_entry': params.rsi_period_entry,
+            'rsi_buy_threshold': params.rsi_buy_threshold,
+            'n_rsi_exit': params.rsi_period_exit,
+            'rsi_sell_threshold': params.rsi_sell_threshold
+        })
+    else:
+        entry_conf = []
+        if params.entry_strategy_1: entry_conf.append({'type': params.entry_strategy_1, 'params': params.entry_params_1})
+        if params.entry_strategy_2: entry_conf.append({'type': params.entry_strategy_2, 'params': params.entry_params_2})
+        
+        exit_conf = []
+        if params.exit_strategy_1: exit_conf.append({'type': params.exit_strategy_1, 'params': params.exit_params_1})
+        if params.exit_strategy_2: exit_conf.append({'type': params.exit_strategy_2, 'params': params.exit_params_2})
+        
+        strat_kwargs.update({
+            'entry_config': entry_conf,
+            'exit_config': exit_conf
+        })
+
+    stats = bt.run(**strat_kwargs)
     
     equity_curve = stats._equity_curve
     trades_df = stats._trades
+    strategy = stats._strategy
     
     bh_list = []
     if len(df) > 0:
@@ -139,15 +215,6 @@ async def run_backtest(params: BacktestRequest):
     detailed_trades = []
     chart_trades = []
     
-    strategy = stats._strategy
-    try:
-        rsi_entry_arr = strategy.rsi_entry_line
-        rsi_exit_arr = strategy.rsi_exit_line
-        sma1_arr = strategy.sma1
-        sma2_arr = strategy.sma2
-    except AttributeError:
-        rsi_entry_arr, rsi_exit_arr, sma1_arr, sma2_arr = [], [], [], []
-
     max_consecutive_loss = 0
     current_loss = 0
 
@@ -155,10 +222,44 @@ async def run_backtest(params: BacktestRequest):
         for i, row in trades_df.iterrows():
             e_idx, x_idx = int(row['EntryBar']), int(row['ExitBar'])
             
-            entry_rsi = safe_num(rsi_entry_arr[e_idx]) if len(rsi_entry_arr) > e_idx else 0
-            exit_rsi = safe_num(rsi_exit_arr[x_idx]) if len(rsi_exit_arr) > x_idx else 0
-            exit_sma1 = safe_num(sma1_arr[x_idx]) if len(sma1_arr) > x_idx else 0
-            exit_sma2 = safe_num(sma2_arr[x_idx]) if len(sma2_arr) > x_idx else 0
+            # --- 動態生成交易說明文字 ---
+            entry_note = ""
+            exit_note = ""
+
+            if params.strategy_mode == 'basic':
+                # Basic Mode: 固定抓 SMA 和 RSI
+                try:
+                    e_rsi = safe_num(strategy.rsi_entry[e_idx]) if len(strategy.rsi_entry) > e_idx else 0
+                    x_rsi = safe_num(strategy.rsi_exit[x_idx]) if len(strategy.rsi_exit) > x_idx else 0
+                    x_sma1 = safe_num(strategy.sma1[x_idx]) if len(strategy.sma1) > x_idx else 0
+                    x_sma2 = safe_num(strategy.sma2[x_idx]) if len(strategy.sma2) > x_idx else 0
+                    entry_note = f"進場RSI: {e_rsi}"
+                    exit_note = f"SMA: {x_sma1}/{x_sma2} | 出場RSI: {x_rsi}"
+                except: pass
+            else:
+                # Advanced Mode: 抓取所有已啟用的策略數值，並用 " | " 串接
+                
+                # 1. 處理進場 (Entry)
+                e_notes_list = []
+                # 策略 1
+                n1 = get_indicator_note(strategy, params.entry_strategy_1, params.entry_params_1, e_idx)
+                if n1: e_notes_list.append(n1)
+                # 策略 2
+                n2 = get_indicator_note(strategy, params.entry_strategy_2, params.entry_params_2, e_idx)
+                if n2: e_notes_list.append(n2)
+                
+                entry_note = " | ".join(e_notes_list)
+
+                # 2. 處理出場 (Exit)
+                x_notes_list = []
+                # 策略 1
+                n1 = get_indicator_note(strategy, params.exit_strategy_1, params.exit_params_1, x_idx)
+                if n1: x_notes_list.append(n1)
+                # 策略 2
+                n2 = get_indicator_note(strategy, params.exit_strategy_2, params.exit_params_2, x_idx)
+                if n2: x_notes_list.append(n2)
+                
+                exit_note = " | ".join(x_notes_list)
 
             detailed_trades.append({
                 "entry_date": row['EntryTime'].strftime("%Y-%m-%d"),
@@ -168,9 +269,10 @@ async def run_backtest(params: BacktestRequest):
                 "size": int(abs(row['Size'])),
                 "pnl": safe_num(row['PnL'], 0),
                 "return_pct": safe_num(row['ReturnPct'] * 100),
-                "entry_rsi": entry_rsi, "exit_rsi": exit_rsi,
-                "exit_sma_short": exit_sma1, "exit_sma_long": exit_sma2
+                "entry_note": entry_note, 
+                "exit_note": exit_note
             })
+            
 
             chart_trades.append({"time": row['EntryTime'].strftime("%Y-%m-%d"), "price": safe_num(row['EntryPrice']), "type": "buy"})
             chart_trades.append({"time": row['ExitTime'].strftime("%Y-%m-%d"), "price": safe_num(row['ExitPrice']), "type": "sell"})
@@ -201,10 +303,8 @@ async def run_backtest(params: BacktestRequest):
         "total_trades": int(stats["# Trades"]),
         "avg_pnl": safe_num(trades_df['PnL'].mean(), 0) if not trades_df.empty else 0,
         "max_consecutive_loss": max_consecutive_loss,
-        
         "max_drawdown": safe_num(stats["Max. Drawdown [%]"]),
         "sharpe_ratio": safe_num(stats["Sharpe Ratio"]),
-        
         "equity_curve": equity_list, "price_data": price_list,
         "trades": chart_trades, "heatmap_data": heatmap_data,
         "buy_and_hold_curve": bh_list, "detailed_trades": detailed_trades

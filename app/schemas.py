@@ -1,25 +1,43 @@
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 class BacktestRequest(BaseModel):
     ticker: str
     start_date: str
     end_date: str
     cash: float = 100000
-    ma_short: int = 10
-    ma_long: int = 60
     
-    # RSI 分離設定
-    rsi_period_entry: int = 14    
-    rsi_buy_threshold: int = 70   
-    
-    rsi_period_exit: int = 14     
-    rsi_sell_threshold: int = 80  
-
+    # --- 交易成本 ---
     buy_fee_pct: float = 0.1425
     sell_fee_pct: float = 0.4425
+    
+    # --- 模式選擇 ---
+    # 基礎 or 進階
+    strategy_mode: str = "basic" 
+
+    # --- 基礎模式參數 ---
+    ma_short: int = 10
+    ma_long: int = 60
+    rsi_period_entry: int = 14    
+    rsi_buy_threshold: int = 70   
+    rsi_period_exit: int = 14     
+    rsi_sell_threshold: int = 80  
     stop_loss_pct: float = 0.0
     take_profit_pct: float = 0.0
+
+    # --- 進階模式參數 ---
+    # 策略名稱
+    entry_strategy_1: Optional[str] = None
+    entry_params_1: Dict[str, float] = {}
+    
+    entry_strategy_2: Optional[str] = None
+    entry_params_2: Dict[str, float] = {}
+    
+    exit_strategy_1: Optional[str] = None
+    exit_params_1: Dict[str, float] = {}
+    
+    exit_strategy_2: Optional[str] = None
+    exit_params_2: Dict[str, float] = {}
 
 class BacktestResponse(BaseModel):
     ticker: str
@@ -31,8 +49,6 @@ class BacktestResponse(BaseModel):
     total_trades: int
     avg_pnl: float
     max_consecutive_loss: int
-    
-    # [新增] 詳細指標
     max_drawdown: float
     sharpe_ratio: float
     
