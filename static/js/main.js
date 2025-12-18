@@ -309,7 +309,10 @@ function updateDashboard(data) {
     const pfEl = document.getElementById('tbl_profit_factor');
     if (pfEl) {
         pfEl.innerText = data.profit_factor;
-        pfEl.className = "p-3 font-bold text-right " + (data.profit_factor >= 1.5 ? "text-green-600" : (data.profit_factor < 1 ? "text-red-500" : "text-gray-600 dark:text-gray-300"));
+        pfEl.className = "p-3 font-bold text-right " +
+            (data.profit_factor >= 1.5 ? "text-green-600 dark:text-green-400" : // 大賺: 綠色
+                (data.profit_factor < 1 ? "text-red-500 dark:text-red-400" :      // 賠錢: 紅色
+                    "text-gray-900 dark:text-white"));                                 // 普通: 黑色 (深色模式白)
     }
 
     const pnlEl = document.getElementById('res_avg_pnl');
