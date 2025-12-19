@@ -401,8 +401,9 @@ function renderMainChart(priceData, trades, equityData, bhData) {
 
     const strategyDataset = {
         label: '當前策略 (%)', data: strategyReturnData,
-        borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true,
+        borderColor: '#106df0ff', // Indigo-500
+        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+        borderWidth: 4, pointRadius: 0, tension: 0.1, fill: true,
         yAxisID: 'y1', order: 1, legendOrder: 10
     };
     const buyDataset = {
@@ -445,17 +446,21 @@ function renderMainChart(priceData, trades, equityData, bhData) {
             interaction: { mode: 'index', intersect: false },
             stacked: false,
             scales: {
-                x: { ticks: { maxTicksLimit: 12, color: textColor }, grid: { color: gridColor } },
+                x: {
+                    ticks: { maxTicksLimit: 12, color: isDark ? '#f1f5f9' : '#1e293b', font: { size: 12, weight: 'bold' } },
+                    grid: { color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)', drawBorder: false }
+                },
                 y: {
                     type: 'linear', display: true, position: 'left',
-                    title: { display: true, text: '股價 (Price)', color: leftAxisColor, font: { weight: 'bold' } },
-                    ticks: { color: leftAxisColor }, grid: { display: false }
+                    title: { display: true, text: '股價 (Price)', color: isDark ? '#cbd5e1' : leftAxisColor, font: { size: 13, weight: 'extrabold' } },
+                    ticks: { color: isDark ? '#cbd5e1' : leftAxisColor, font: { size: 12, weight: 'bold' } },
+                    grid: { display: false }
                 },
                 y1: {
                     type: 'linear', display: true, position: 'right',
-                    title: { display: true, text: '累積報酬率 (%)', color: '#3b82f6' },
-                    ticks: { color: textColor, callback: (v) => v + '%' },
-                    grid: { color: gridColor, drawOnChartArea: true }
+                    title: { display: true, text: '累積報酬率 (%)', color: isDark ? '#cbd5e1' : leftAxisColor, font: { size: 13, weight: 'extrabold' } },
+                    ticks: { color: isDark ? '#cbd5e1' : leftAxisColor, callback: (v) => v + '%', font: { size: 12, weight: 'bold' } },
+                    grid: { color: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)', drawOnChartArea: true, drawBorder: false }
                 }
             },
             plugins: {
@@ -503,7 +508,7 @@ function updateCustomLegend(chart) {
         const chartContainer = document.getElementById('chartContainer');
         legendDiv = document.createElement('div');
         legendDiv.id = 'js-legend-container';
-        legendDiv.className = "w-full p-2 flex flex-wrap gap-4 justify-center bg-gray-50/80 dark:bg-slate-800/80 border-b border-gray-100 dark:border-slate-700 mb-2 rounded-t-xl z-20 absolute top-0 left-0";
+        legendDiv.className = "w-full p-2 flex flex-wrap gap-4 justify-center bg-gray-50/80 dark:bg-slate-800/80 border-b border-gray-100 dark:border-slate-700 z-20";
         chartContainer.prepend(legendDiv);
     }
     legendDiv.innerHTML = '';
@@ -538,13 +543,13 @@ function updateCustomLegend(chart) {
         groupEl.className = "flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-700/50 rounded-lg shadow-sm border border-gray-200 dark:border-slate-600";
 
         const titleEl = document.createElement('div');
-        titleEl.className = "text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mr-1 border-r border-gray-200 dark:border-slate-500 pr-2";
+        titleEl.className = "text-xs font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider mr-1 border-r border-gray-200 dark:border-slate-500 pr-2"; // Changed from text-[10px] to text-xs
         titleEl.innerText = group.title;
         groupEl.appendChild(titleEl);
 
         group.items.forEach(item => {
             const btn = document.createElement('button');
-            btn.className = `flex items-center gap-1.5 text-xs font-medium transition-all duration-200 ${item.hidden ? 'opacity-40 grayscale decoration-slice' : 'opacity-100'}`;
+            btn.className = `flex items-center gap-1.5 text-sm font-medium transition-all duration-200 ${item.hidden ? 'opacity-40 grayscale decoration-slice' : 'opacity-100'}`; // Changed from text-xs to text-sm
 
             const icon = document.createElement('span');
             icon.className = "inline-block";
@@ -623,11 +628,11 @@ function renderDrawdownChart(data) {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             scales: {
-                x: { ticks: { maxTicksLimit: 12, color: textColor }, grid: { color: gridColor, display: false } },
+                x: { ticks: { maxTicksLimit: 12, color: textColor, font: { size: 12 } }, grid: { color: gridColor, display: false } },
                 y: {
-                    title: { display: true, text: '回撤 (%)', color: textColor },
-                    ticks: { color: textColor, callback: (v) => v + '%' },
-                    grid: { color: gridColor },
+                    title: { display: true, text: '回撤 (%)', color: textColor, font: { weight: 'bold' } },
+                    ticks: { color: textColor, callback: (v) => v + '%', font: { size: 12 } },
+                    grid: { color: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', drawBorder: false },
                     suggestedMin: -30, max: 0
                 }
             },
@@ -676,17 +681,15 @@ function renderPnLHistogram(data) {
             scales: {
                 x: {
                     ticks: {
-                        color: textColor,
-                        maxRotation: 45,
-                        minRotation: 0,
-                        font: { size: 10 }
+                        color: isDark ? '#94a3b8' : '#64748b',
+                        font: { size: 12, weight: 'bold' }
                     },
                     grid: { display: false }
                 },
                 y: {
-                    title: { display: true, text: '次數', color: textColor },
-                    ticks: { color: textColor, stepSize: 1 }, // 次數一定是整數
-                    grid: { color: gridColor }
+                    title: { display: true, text: '次數', color: textColor, font: { weight: 'bold' } },
+                    ticks: { color: textColor, stepSize: 1, font: { size: 12 } }, // 次數一定是整數
+                    grid: { color: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)', drawBorder: false }
                 }
             },
             plugins: {
@@ -800,34 +803,58 @@ function renderTradeList(trades) {
     sortedTrades.forEach(trade => {
         const isProfit = trade.pnl >= 0;
         const pnlColor = isProfit ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400';
+        const pnlBg = isProfit ? 'bg-green-50 dark:bg-green-900/30' : 'bg-red-50 dark:bg-red-900/30';
         const sign = isProfit ? '+' : '';
 
-        const entryCondition = trade.entry_note ? `(${trade.entry_note})` : '';
-        const exitCondition = trade.exit_note ? `(${trade.exit_note})` : '';
+        const entryNote = trade.entry_note ? `<span class="text-xs bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 rounded ml-1 font-medium text-gray-500 dark:text-gray-400">${trade.entry_note}</span>` : '';
+        const exitNote = trade.exit_note ? `<span class="text-xs bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 rounded ml-1 font-medium text-gray-500 dark:text-gray-400">${trade.exit_note}</span>` : '';
 
         const html = `
-        <div class="py-5 px-2 hover:bg-gray-50 dark:hover:bg-slate-700 transition duration-150">
-            <div class="flex flex-col md:flex-row gap-4">
-                <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="text-xs font-mono text-gray-400 dark:text-gray-500">${trade.entry_date}</span>
-                        <span class="px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-300 rounded">買入</span>
-                        <span class="font-bold text-gray-800 dark:text-gray-200 text-lg">${trade.entry_price}</span>
-                        <span class="text-xs text-gray-500 dark:text-gray-400">${trade.size} 股</span>
+        <div class="py-5 px-4 border-b border-gray-100 dark:border-slate-700/50 last:border-0 hover:bg-gray-50/80 dark:hover:bg-slate-700/40 transition-all group">
+            <div class="flex flex-col lg:flex-row gap-5 lg:items-center">
+                
+                <!-- Entry Section -->
+                <div class="flex-1 flex items-start gap-4">
+                    <div class="w-1.5 h-12 rounded-full bg-red-400 mt-1 shadow-sm"></div>
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xs font-black text-red-500 uppercase tracking-wider">買進 (Enter)</span>
+                            <span class="text-xs font-mono font-bold text-gray-400 dark:text-gray-500">${trade.entry_date}</span>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="font-black text-gray-900 dark:text-white text-xl">$${trade.entry_price.toLocaleString()}</span>
+                            <span class="text-sm font-bold text-gray-400">${trade.size.toLocaleString()} 股</span>
+                            ${entryNote}
+                        </div>
                     </div>
-                    <p class="text-xs text-gray-400 dark:text-gray-500 pl-1">${entryCondition}</p>
                 </div>
-                <div class="flex-1 md:text-right">
-                     <div class="flex items-center gap-2 mb-1 md:justify-end">
-                        <span class="text-xs font-mono text-gray-400 dark:text-gray-500">${trade.exit_date}</span>
-                        <span class="px-2 py-0.5 text-[10px] font-bold bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-300 rounded">賣出</span>
-                        <span class="font-bold text-gray-800 dark:text-gray-200 text-lg">${trade.exit_price}</span>
+
+                <!-- Separator Arrow -->
+                <div class="hidden lg:block text-gray-300 dark:text-gray-600">
+                    <svg class="w-6 h-6 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+                </div>
+
+                <!-- Exit Section -->
+                <div class="flex-1 flex items-start gap-4">
+                    <div class="w-1.5 h-12 rounded-full bg-green-400 mt-1 shadow-sm"></div>
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xs font-black text-green-500 uppercase tracking-wider">賣出 (Exit)</span>
+                            <span class="text-xs font-mono font-bold text-gray-400 dark:text-gray-500">${trade.exit_date}</span>
+                        </div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="font-black text-gray-900 dark:text-white text-xl">$${trade.exit_price.toLocaleString()}</span>
+                            ${exitNote}
+                        </div>
                     </div>
-                    <p class="text-xs text-gray-400 dark:text-gray-500 pr-1">${exitCondition}</p>
                 </div>
-                <div class="w-full md:w-32 text-right flex items-center justify-end">
-                    <span class="text-lg font-bold ${pnlColor}">${sign}${trade.pnl}元</span>
+
+                <!-- PnL Section -->
+                <div class="lg:w-44 px-5 py-3 rounded-2xl ${pnlBg} flex flex-col items-end justify-center transition-all group-hover:scale-105 border border-transparent group-hover:border-current/10">
+                    <span class="text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-0.5">交易損益</span>
+                    <span class="text-xl font-black ${pnlColor} tracking-tight">${sign}${trade.pnl.toLocaleString()} <span class="text-sm">元</span></span>
                 </div>
+                
             </div>
         </div>`;
         container.innerHTML += html;
