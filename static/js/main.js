@@ -152,6 +152,11 @@ document.addEventListener('DOMContentLoaded', function () {
     if (endDateInput && startDateInput) {
         endDateInput.value = formatDate(today);
         startDateInput.value = formatDate(start);
+
+        // 限制不能選擇未來日期
+        const maxDate = formatDate(today);
+        endDateInput.max = maxDate;
+        startDateInput.max = maxDate;
     }
 
     const tickerInput = document.getElementById('ticker');
@@ -224,24 +229,83 @@ function initStrategySelects() {
     });
 }
 
+
+
+// 輔助函式：平滑高度切換
+function smoothToggle(showEl, hideEl) {
+    // 1. 處理要隱藏的元素 (Closing)
+    const currentHeight = hideEl.scrollHeight;
+    hideEl.style.maxHeight = currentHeight + "px";
+    hideEl.style.overflow = 'hidden';
+    hideEl.style.transition = 'all 0.4s ease-in-out';
+    hideEl.style.opacity = '1';
+
+    // 強制重繪，確保起始狀態生效
+    void hideEl.offsetHeight;
+
+    // 開始收合
+    hideEl.style.maxHeight = '0px';
+    hideEl.style.opacity = '0';
+
+    // 動畫結束後清理
+    setTimeout(() => {
+        hideEl.classList.add('hidden');
+        hideEl.style.maxHeight = '';
+        hideEl.style.opacity = '';
+        hideEl.style.overflow = '';
+        hideEl.style.transition = '';
+        hideEl.style.display = ''; // 清除 inline-style，避免影響下次切換
+    }, 400);
+
+    // 2. 處理要顯示的元素 (Opening)
+    // 關鍵：先設定初始狀態為隱藏 (0高度/透明)，再移除 hidden class，避免 FOUC (瞬間閃現)
+    showEl.style.maxHeight = '0px';
+    showEl.style.opacity = '0';
+    showEl.style.overflow = 'hidden';
+    showEl.style.transition = 'all 0.4s ease-in-out';
+
+    showEl.classList.remove('hidden');
+    showEl.style.display = 'block'; // 確保可以計算正確高度
+
+    // 取得目標高度
+    const targetHeight = showEl.scrollHeight + "px";
+
+    // 強制重繪
+    void showEl.offsetHeight;
+
+    // 開始展開
+    showEl.style.maxHeight = targetHeight;
+    showEl.style.opacity = '1';
+
+    // 動畫結束後清理
+    setTimeout(() => {
+        showEl.style.maxHeight = 'none'; // 解除高度限制
+        showEl.style.overflow = 'visible';
+        showEl.style.transition = '';
+        showEl.style.opacity = '';
+        showEl.style.display = ''; // 關鍵：清除 inline display，讓 class hidden 能在下次生效
+    }, 400);
+}
+
 function switchMode(mode) {
+    if (currentMode === mode) return; // 避免重複點擊
     currentMode = mode;
+
     const basicDiv = document.getElementById('basic-settings');
     const advDiv = document.getElementById('advanced-settings');
     const tabBasic = document.getElementById('tab-basic');
     const tabAdv = document.getElementById('tab-advanced');
 
-    // 說明區塊與副標題
+    // 說明區塊與副標題 (維持直接切換或簡單淡入淡出，這裡簡單處理)
     const descBasic = document.getElementById('desc-basic');
     const descAdv = document.getElementById('desc-advanced');
     const subBasic = document.getElementById('subtitle-basic');
     const subAdv = document.getElementById('subtitle-advanced');
 
     if (mode === 'basic') {
-        basicDiv.classList.remove('hidden');
-        advDiv.classList.add('hidden');
+        smoothToggle(basicDiv, advDiv);
 
-        tabBasic.className = "flex-1 py-1.5 rounded-md shadow-sm bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 transition-all";
+        tabBasic.className = "flex-1 py-1.5 rounded-md shadow-sm bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 transition-all font-bold";
         tabAdv.className = "flex-1 py-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all";
 
         descBasic.classList.remove('hidden');
@@ -250,11 +314,10 @@ function switchMode(mode) {
         subAdv.classList.add('hidden');
 
     } else {
-        basicDiv.classList.add('hidden');
-        advDiv.classList.remove('hidden');
+        smoothToggle(advDiv, basicDiv);
 
         tabBasic.className = "flex-1 py-1.5 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-all";
-        tabAdv.className = "flex-1 py-1.5 rounded-md shadow-sm bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 transition-all";
+        tabAdv.className = "flex-1 py-1.5 rounded-md shadow-sm bg-white dark:bg-slate-600 text-blue-600 dark:text-blue-400 transition-all font-bold";
 
         descBasic.classList.add('hidden');
         subBasic.classList.add('hidden');
@@ -352,7 +415,7 @@ async function executeBacktest() {
     console.log("Backtest started...");
     const tickerInput = document.getElementById('ticker');
     const ticker = tickerInput.value.trim();
-    if (!ticker) { alert("請輸入股票代碼！"); return; }
+    if (!ticker) { showToast("請輸入股票代碼！", "error"); return; }
 
     const btn = document.getElementById('runBtn');
     const originalText = btn.innerHTML;
@@ -415,9 +478,10 @@ async function executeBacktest() {
 
         const data = await res.json();
         updateDashboard(data);
+        showToast("回測執行成功", "success");
 
     } catch (err) {
-        alert('錯誤: ' + err.message);
+        showToast('執行失敗: ' + err.message, 'error');
         console.error(err);
     } finally {
         btn.disabled = false;
@@ -427,18 +491,74 @@ async function executeBacktest() {
     }
 }
 
+
+
+function animateCountUp(elementId, targetValue, duration = 1000, isCurrency = false, isPct = false, showPositiveSign = true) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    const startValue = 0;
+    const startTime = performance.now();
+
+    // 判斷是否為小數
+    const isFloat = targetValue % 1 !== 0;
+
+    function update(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // EaseOutQuart 緩動函數
+        const ease = 1 - Math.pow(1 - progress, 4);
+
+        const currentVal = startValue + (targetValue - startValue) * ease;
+
+        let displayVal;
+        if (isCurrency) {
+            displayVal = '$' + Math.floor(currentVal).toLocaleString();
+        } else if (isFloat) {
+            displayVal = currentVal.toFixed(2);
+        } else {
+            displayVal = Math.floor(currentVal);
+        }
+
+        if (isPct) displayVal += '%';
+        if (targetValue > 0 && !isCurrency && isPct && showPositiveSign) displayVal = '+' + displayVal;
+
+        el.innerText = displayVal;
+
+        if (progress < 1) {
+            requestAnimationFrame(update);
+        } else {
+            // 確保最終數值精確
+            let finalVal = targetValue;
+            if (isCurrency) finalVal = '$' + finalVal.toLocaleString();
+            else if (isFloat) finalVal = finalVal.toFixed(2) + (isPct ? '%' : '');
+            else finalVal = finalVal + (isPct ? '%' : '');
+
+            if (targetValue > 0 && !isCurrency && isPct && showPositiveSign) finalVal = '+' + finalVal;
+            el.innerText = finalVal;
+        }
+    }
+
+    requestAnimationFrame(update);
+}
+
 function updateDashboard(data) {
     updateCard('res_total_return', data.total_return, true);
-    const bhEl = document.getElementById('res_bh_return');
-    bhEl.innerText = (data.buy_and_hold_return > 0 ? '+' : '') + data.buy_and_hold_return + '%';
-    bhEl.className = "text-3xl font-bold mt-1 " + (data.buy_and_hold_return > 0 ? "text-teal-600 dark:text-teal-400" : (data.buy_and_hold_return < 0 ? "text-red-500 dark:text-red-400" : "text-gray-300 dark:text-gray-600"));
 
-    document.getElementById('res_final_equity').innerText = '$' + data.final_equity.toLocaleString();
+    // 買進持有 - Count Up
+    const bhEl = document.getElementById('res_bh_return');
+    bhEl.className = "text-3xl font-bold mt-1 " + (data.buy_and_hold_return > 0 ? "text-teal-600 dark:text-teal-400" : (data.buy_and_hold_return < 0 ? "text-red-500 dark:text-red-400" : "text-gray-300 dark:text-gray-600"));
+    animateCountUp('res_bh_return', data.buy_and_hold_return, 1000, false, true);
+
+    // 最終資產 - Count Up
+    animateCountUp('res_final_equity', data.final_equity, 1500, true, false);
 
     const winRateEl = document.getElementById('res_win_rate');
-    winRateEl.innerText = data.win_rate + '%';
     winRateEl.classList.remove('text-gray-300', 'dark:text-gray-600');
     winRateEl.classList.add('text-gray-900', 'dark:text-white');
+    animateCountUp('res_win_rate', data.win_rate, 1000, false, true);
+
     // 顯示勝場/總場
     document.getElementById('res_trades').innerText = `${data.winning_trades} / ${data.total_trades}`;
 
@@ -447,26 +567,26 @@ function updateDashboard(data) {
     updateTableValue('tbl_sharpe', data.sharpe_ratio, true);
 
     const mddEl = document.getElementById('tbl_mdd');
-    mddEl.innerText = Math.abs(data.max_drawdown) + '%';
     mddEl.className = "p-3 font-bold text-right text-red-500 dark:text-red-400";
+    animateCountUp('tbl_mdd', Math.abs(data.max_drawdown), 800, false, true, false); // 不顯示正號
 
     updateTableValue('tbl_win_rate', data.win_rate, true);
 
-    // 獲利因子
+    // 獲利因子 - Count Up
     const pfEl = document.getElementById('tbl_profit_factor');
     if (pfEl) {
-        pfEl.innerText = data.profit_factor;
         pfEl.className = "p-3 font-bold text-right " +
             (data.profit_factor >= 1.5 ? "text-green-600 dark:text-green-400" :
                 (data.profit_factor < 1 ? "text-red-500 dark:text-red-400" :
                     "text-gray-900 dark:text-white"));
+        animateCountUp('tbl_profit_factor', data.profit_factor, 800);
     }
 
     const pnlEl = document.getElementById('res_avg_pnl');
     const pnlVal = data.avg_pnl;
-    const sign = pnlVal > 0 ? '+' : '';
-    pnlEl.innerText = `${sign}${pnlVal.toLocaleString()}`;
     pnlEl.className = "p-3 font-bold text-right " + (pnlVal >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400");
+    // 平均盈虧太快，直接顯示或也可以做動畫，這邊先維持直接顯示帶符號
+    pnlEl.innerText = (pnlVal > 0 ? '+' : '') + pnlVal.toLocaleString();
 
     document.getElementById('res_consec_loss').innerText = data.max_consecutive_loss + " 次";
 
@@ -494,13 +614,13 @@ function updateDashboard(data) {
 
 function updateCard(id, value, isPct) {
     const el = document.getElementById(id);
-    const suffix = isPct ? '%' : '';
-    const prefix = (value > 0 && isPct) ? '+' : '';
-    el.innerText = prefix + value + suffix;
     el.className = "text-3xl font-bold mt-1 ";
     if (value > 0) el.classList.add("text-teal-600", "dark:text-teal-400");
     else if (value < 0) el.classList.add("text-red-500", "dark:text-red-400");
     else el.classList.add("text-gray-300", "dark:text-gray-600");
+
+    // 使用動畫函數
+    animateCountUp(id, value, 1000, false, isPct);
 }
 
 function updateTableValue(id, value, isGreenRed) {
@@ -1007,4 +1127,46 @@ function renderTradeList(trades) {
         </div>`;
         container.innerHTML += html;
     });
+}
+
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = "fixed top-5 right-5 z-50 flex flex-col gap-3 pointer-events-none";
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    const bgColor = type === 'error' ? 'bg-red-600/90' : (type === 'success' ? 'bg-green-600/90' : 'bg-slate-800/90');
+
+    toast.className = `${bgColor} text-white px-4 py-3 rounded-xl shadow-2xl backdrop-blur-md transform transition-all duration-300 translate-x-10 opacity-0 flex items-center gap-3 min-w-[300px]`;
+
+    const icon = type === 'error'
+        ? '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+        : '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+
+    toast.innerHTML = `
+        ${icon}
+        <div class="flex-1">
+            <p class="font-bold text-sm">${type === 'error' ? 'Error' : (type === 'success' ? 'Success' : 'Info')}</p>
+            <p class="text-xs opacity-90">${message}</p>
+        </div>
+    `;
+
+    container.appendChild(toast);
+
+    // 動畫進入
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-x-10', 'opacity-0');
+    });
+
+    // 自動消失
+    setTimeout(() => {
+        toast.classList.add('translate-x-10', 'opacity-0');
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 300);
+    }, 3000);
 }

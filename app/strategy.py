@@ -161,37 +161,62 @@ class UniversalStrategy(Strategy):
         return combined_result
 
     def next(self):
-        price = self.price[-1]
+        # 使用 self.data.Close[-1] 確保獲取當前 Bar 的收盤價
+        price = self.data.Close[-1]
         
-        # 全域移動停損 (優先於指標)
-        if self.position and self.trailing_stop_pct > 0:
-            if self.position.is_long:
-                new_sl = price * (1 - self.trailing_stop_pct / 100)
-                current_sl = self.position.sl or 0
-                if new_sl > current_sl: self.position.sl = new_sl
+        # -----------------------------
+        # 1. 持倉管理 (移動停損 & 出場)
+        # -----------------------------
+        if self.position:
+            # A. 移動停損 (Trailing Stop) - 手動實作
+            if self.trailing_stop_pct > 0:
+                # 更新最高價
+                if not hasattr(self, 'peak_price') or self.peak_price < price:
+                    self.peak_price = price
+                
+                # 檢查是否觸發移動停損
+                ts_price = self.peak_price * (1 - self.trailing_stop_pct / 100)
+                if price < ts_price:
+                    self.position.close()
+                    return # 已出場，跳過後續
 
-        if self.mode == "basic":
-            if self.position:
+            # B. 策略出場訊號檢查
+            if self.mode == "basic":
                 if crossover(self.sma2, self.sma1) or self.rsi_exit[-1] > self.rsi_sell_threshold:
                     self.position.close()
-            else:
-                if crossover(self.sma1, self.sma2) and self.rsi_entry[-1] < self.rsi_buy_threshold:
-                    sl = price * (1 - self.sl_pct/100) if self.sl_pct > 0 else None
-                    tp = price * (1 + self.tp_pct/100) if self.tp_pct > 0 else None
-                    if self.trailing_stop_pct > 0:
-                        initial_ts = price * (1 - self.trailing_stop_pct / 100)
-                        sl = max(sl, initial_ts) if sl else initial_ts
-                    self.buy(sl=sl, tp=tp)
-        
-        elif self.mode == "advanced":
-            if self.position:
+            elif self.mode == "advanced":
                 if self.check_signal(self.exit_config, is_entry=False):
                     self.position.close()
-            else:
+
+        # -----------------------------
+        # 2. 進場邏輯
+        # -----------------------------
+        else:
+            # 重置最高價追蹤
+            self.peak_price = 0
+
+            signal = False
+            if self.mode == "basic":
+                if crossover(self.sma1, self.sma2) and self.rsi_entry[-1] < self.rsi_buy_threshold:
+                    signal = True
+            elif self.mode == "advanced":
                 if self.check_signal(self.entry_config, is_entry=True):
-                    sl = price * (1 - self.sl_pct/100) if self.sl_pct > 0 else None
-                    tp = price * (1 + self.tp_pct/100) if self.tp_pct > 0 else None
-                    if self.trailing_stop_pct > 0:
-                        initial_ts = price * (1 - self.trailing_stop_pct / 100)
-                        sl = max(sl, initial_ts) if sl else initial_ts
-                    self.buy(sl=sl, tp=tp)
+                    signal = True
+            
+            if signal:
+                sl = None
+                tp = None
+                
+                # 計算固定停損/停利 (基於當前價格預估)
+                # 注意: 實際成交價可能略有不同(隔日開盤)，但這是回測引擎的限制，
+                # 我們傳入 sl/tp 給 buy()，引擎會幫我們掛單
+                if self.sl_pct > 0:
+                    sl = price * (1 - self.sl_pct/100)
+                
+                if self.tp_pct > 0:
+                    tp = price * (1 + self.tp_pct/100)
+
+                # 排除無效的 SL (如果計算錯誤導致 SL > Price)
+                if sl and sl >= price: sl = None
+
+                self.buy(sl=sl, tp=tp)
