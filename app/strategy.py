@@ -91,74 +91,130 @@ class UniversalStrategy(Strategy):
                 p = cfg.get('params', {})
                 
                 if stype in ['SMA_CROSS', 'SMA_DEATH']:
-                    self._register_indicator(f"SMA_{int(p['n_short'])}", SMA, self.price, int(p['n_short']))
-                    self._register_indicator(f"SMA_{int(p['n_long'])}", SMA, self.price, int(p['n_long']))
+                    n_s = int(p.get('n_short', 10))
+                    n_l = int(p.get('n_long', 60))
+                    self._register_indicator(f"SMA_{n_s}", SMA, self.price, n_s)
+                    self._register_indicator(f"SMA_{n_l}", SMA, self.price, n_l)
                 elif stype in ['RSI_OVERSOLD', 'RSI_OVERBOUGHT']:
-                    self._register_indicator(f"RSI_{int(p['period'])}", RSI, self.price, int(p['period']))
+                    per = int(p.get('period', 14))
+                    self._register_indicator(f"RSI_{per}", RSI, self.price, per)
                 elif stype in ['MACD_GOLDEN', 'MACD_DEATH']:
-                    self._register_indicator(f"MACD_{int(p['fast'])}_{int(p['slow'])}_{int(p['signal'])}", MACD, self.price, int(p['fast']), int(p['slow']), int(p['signal']))
+                    f = int(p.get('fast', 12))
+                    s = int(p.get('slow', 26))
+                    sig = int(p.get('signal', 9))
+                    self._register_indicator(f"MACD_{f}_{s}_{sig}", MACD, self.price, f, s, sig)
                 elif stype in ['KD_GOLDEN', 'KD_DEATH']:
-                    self._register_indicator(f"KD_{int(p['period'])}", KD, self.data.High, self.data.Low, self.price, int(p['period']))
-                elif stype in ['BB_BREAK', 'BB_REVERSE']:
-                    self._register_indicator(f"BB_{int(p['period'])}_{p['std']}", BBANDS, self.price, int(p['period']), p['std'])
+                    per = int(p.get('period', 9))
+                    self._register_indicator(f"KD_{per}", KD, self.data.High, self.data.Low, self.data.Close, per)
+                elif stype in ['BB_LOWER', 'BB_UPPER', 'BB_BREAK', 'BB_REVERSE']:
+                    per = int(p.get('period', 20))
+                    std = float(p.get('std', 2.0))
+                    self._register_indicator(f"BB_{per}_{std}", BBANDS, self.price, per, std)
                 elif stype in ['WILLR_OVERSOLD', 'WILLR_OVERBOUGHT']:
-                    self._register_indicator(f"WILLR_{int(p['period'])}", WILLR, self.data.High, self.data.Low, self.price, int(p['period']))
-                elif stype == 'TURTLE_ENTRY':
-                    self._register_indicator(f"DONCHIAN_HIGH_{int(p['period'])}", DONCHIAN_HIGH, self.data.High, int(p['period']))
-                elif stype == 'TURTLE_EXIT':
-                    self._register_indicator(f"DONCHIAN_LOW_{int(p['period'])}", DONCHIAN_LOW, self.data.Low, int(p['period']))
+                    per = int(p.get('period', 14))
+                    self._register_indicator(f"WILLR_{per}", WILLR, self.data.High, self.data.Low, self.data.Close, per)
+                elif stype in ['TURTLE_ENTRY', 'TURTLE_EXIT']:
+                    per = int(p.get('period', 20))
+                    if 'ENTRY' in stype:
+                        self._register_indicator(f"DONCHIAN_HIGH_{per}", DONCHIAN_HIGH, self.data.High, per)
+                    else:
+                        self._register_indicator(f"DONCHIAN_LOW_{per}", DONCHIAN_LOW, self.data.Low, per)
 
     def _register_indicator(self, key, func, *args):
         if not hasattr(self, key): setattr(self, key, self.I(func, *args))
 
     def check_signal(self, config_list, is_entry=True):
         if not config_list: return False
-        combined_result = True if is_entry else False
         
-        for cfg in config_list:
-            stype = cfg.get('type')
-            p = cfg.get('params', {})
-            res = False
+        # 只要有一個策略符合就觸發 (OR 邏輯)
+        for conf in config_list:
+            stype = conf.get('type')
+            params = conf.get('params', {})
+            
             try:
                 if stype == 'SMA_CROSS':
-                    res = crossover(getattr(self, f"SMA_{int(p['n_short'])}"), getattr(self, f"SMA_{int(p['n_long'])}"))
-                elif stype == 'SMA_DEATH':
-                    res = crossover(getattr(self, f"SMA_{int(p['n_long'])}"), getattr(self, f"SMA_{int(p['n_short'])}"))
-                elif stype == 'RSI_OVERSOLD':
-                    res = getattr(self, f"RSI_{int(p['period'])}")[-1] < p['threshold']
-                elif stype == 'RSI_OVERBOUGHT':
-                    res = getattr(self, f"RSI_{int(p['period'])}")[-1] > p['threshold']
-                elif stype == 'MACD_GOLDEN':
-                    m, s = getattr(self, f"MACD_{int(p['fast'])}_{int(p['slow'])}_{int(p['signal'])}")
-                    res = crossover(m, s)
-                elif stype == 'MACD_DEATH':
-                    m, s = getattr(self, f"MACD_{int(p['fast'])}_{int(p['slow'])}_{int(p['signal'])}")
-                    res = crossover(s, m)
-                elif stype == 'KD_GOLDEN':
-                    k, d = getattr(self, f"KD_{int(p['period'])}")
-                    res = crossover(k, d) and d[-1] < p['threshold']
-                elif stype == 'KD_DEATH':
-                    k, d = getattr(self, f"KD_{int(p['period'])}")
-                    res = crossover(d, k) and d[-1] > p['threshold']
-                elif stype == 'BB_BREAK':
-                    u, l = getattr(self, f"BB_{int(p['period'])}_{p['std']}")
-                    res = self.price[-1] > u[-1]
-                elif stype == 'BB_REVERSE':
-                    u, l = getattr(self, f"BB_{int(p['period'])}_{p['std']}")
-                    res = self.price[-1] < u[-1] and self.price[-2] > u[-2]
-                elif stype == 'WILLR_OVERSOLD':
-                    res = getattr(self, f"WILLR_{int(p['period'])}")[-1] < p['threshold']
-                elif stype == 'WILLR_OVERBOUGHT':
-                    res = getattr(self, f"WILLR_{int(p['period'])}")[-1] > p['threshold']
-                elif stype == 'TURTLE_ENTRY':
-                    res = self.price[-1] > getattr(self, f"DONCHIAN_HIGH_{int(p['period'])}")[-1]
-                elif stype == 'TURTLE_EXIT':
-                    res = self.price[-1] < getattr(self, f"DONCHIAN_LOW_{int(p['period'])}")[-1]
-            except: res = False
-            
-            if is_entry: combined_result = combined_result and res
-            else: combined_result = combined_result or res
-        return combined_result
+                    # 預設: 短10, 長60
+                    n_s = int(params.get('n_short', 10))
+                    n_l = int(params.get('n_long', 60))
+                    ma_s = getattr(self, f"SMA_{n_s}")
+                    ma_l = getattr(self, f"SMA_{n_l}")
+                    if is_entry:
+                        if crossover(ma_s, ma_l): return True
+                    else:
+                        if crossover(ma_l, ma_s): return True
+
+                elif stype == 'RSI_OVERSOLD' or stype == 'RSI_OVERBOUGHT':
+                    # 預設: 14, 閥值 30/70
+                    p = int(params.get('period', 14))
+                    rsi = getattr(self, f"RSI_{p}")
+                    thresh = float(params.get('threshold', 30 if is_entry else 70))
+                    if is_entry:
+                        if rsi[-1] < thresh: return True
+                    else:
+                        if rsi[-1] > thresh: return True
+
+                elif stype == 'MACD_GOLDEN' or stype == 'MACD_DEATH':
+                    # 預設: 12, 26, 9
+                    f = int(params.get('fast', 12))
+                    s = int(params.get('slow', 26))
+                    sig = int(params.get('signal', 9))
+                    key = f"MACD_{f}_{s}_{sig}"
+                    macd_line = getattr(self, key)[0]
+                    sig_line = getattr(self, key)[1]
+                    if is_entry: # 黃金交叉
+                        if crossover(macd_line, sig_line) and macd_line[-1] < 0: return True
+                    else: # 死亡交叉
+                        if crossover(sig_line, macd_line): return True
+
+                elif stype == 'KD_GOLDEN' or stype == 'KD_DEATH':
+                    # 預設: 9
+                    p = int(params.get('period', 9))
+                    key = f"KD_{p}"
+                    k = getattr(self, key)[0]
+                    d = getattr(self, key)[1]
+                    if is_entry:
+                        if crossover(k, d) and k[-1] < 20: return True
+                    else:
+                        if crossover(d, k) and k[-1] > 80: return True
+
+                elif stype == 'BB_LOWER' or stype == 'BB_UPPER':
+                    # 預設: 20, 2.0
+                    p = int(params.get('period', 20))
+                    std = float(params.get('std', 2.0))
+                    key = f"BB_{p}_{std}"
+                    upper = getattr(self, key)[0]
+                    lower = getattr(self, key)[1]
+                    close = self.data.Close
+                    if is_entry: # 觸碰下通道
+                        if close[-1] < lower[-1]: return True
+                    else: # 觸碰上通道
+                        if close[-1] > upper[-1]: return True
+
+                elif stype == 'WILLR_OVERSOLD' or stype == 'WILLR_OVERBOUGHT':
+                    # 預設: 14, -80/-20
+                    p = int(params.get('period', 14))
+                    wr = getattr(self, f"WILLR_{p}")
+                    thresh = float(params.get('threshold', -80 if is_entry else -20))
+                    if is_entry:
+                        if wr[-1] < thresh: return True
+                    else:
+                        if wr[-1] > thresh: return True
+                
+                elif stype == 'TURTLE_ENTRY' or stype == 'TURTLE_EXIT':
+                    # 預設: 20
+                    p = int(params.get('period', 20))
+                    if is_entry:
+                        h = getattr(self, f"DONCHIAN_HIGH_{p}")
+                        if self.data.Close[-1] > h[-2]: return True
+                    else:
+                        l = getattr(self, f"DONCHIAN_LOW_{p}")
+                        if self.data.Close[-1] < l[-2]: return True
+
+            except Exception as e:
+                print(f"[Strategy Error] {stype}: {e}")
+                continue
+
+        return False
 
     def next(self):
         # 使用 self.data.Close[-1] 確保獲取當前 Bar 的收盤價

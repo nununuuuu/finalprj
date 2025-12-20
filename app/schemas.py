@@ -1,15 +1,15 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
 
 class BacktestRequest(BaseModel):
     ticker: str
     start_date: str
     end_date: str
-    cash: float = 100000
+    cash: float = Field(default=100000, gt=0, description="Initial cash")
     
     # --- 交易成本 ---
-    buy_fee_pct: float = 0.1425
-    sell_fee_pct: float = 0.4425
+    buy_fee_pct: float = Field(default=0.1425, ge=0, le=10, description="Buy fee percentage")
+    sell_fee_pct: float = Field(default=0.4425, ge=0, le=10, description="Sell fee percentage")
     
     # --- 模式選擇 ---
     # 基礎 or 進階

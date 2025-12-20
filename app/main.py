@@ -177,6 +177,14 @@ async def run_backtest(params: BacktestRequest):
     if len(df) < min_bars:
         raise HTTPException(status_code=400, detail=f"數據不足 {min_bars} 筆")
 
+    # 清除可能的 NaN 值，避免 Backtesting 引擎崩潰
+    if df.isnull().values.any():
+        df = df.dropna()
+    
+    # 二次檢查長度
+    if len(df) < min_bars:
+        raise HTTPException(status_code=400, detail=f"有效數據不足 {min_bars} 筆 (含空值)")
+
     bt = Backtest(
         df, 
         UniversalStrategy, 
