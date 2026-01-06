@@ -454,6 +454,7 @@ function renderParams(type, index) {
             if (p.min !== undefined) input.min = p.min;
             if (p.max !== undefined) input.max = p.max;
             input.step = p.step || (p.v % 1 === 0 ? "1" : "0.1");
+            input.dataset.default = p.v; // 紀錄預設值
 
             div.appendChild(input);
             container.appendChild(div);
@@ -511,6 +512,40 @@ async function executeBacktest() {
     chartContainer.classList.add('opacity-50', 'pointer-events-none');
     document.body.style.cursor = 'wait';
 
+    // 自動填補空值 (Auto-fill defaults)
+    const defaults = {
+        'cash': 100000,
+        'buy_fee': 0.1425,
+        'sell_fee': 0.4425,
+        'sl_pct': 0,
+        'tp_pct': 0,
+        'ts_pct': 0,
+        'ma_short': 10,
+        'ma_long': 60,
+        'rsi_period_entry': 14,
+        'rsi_buy_threshold': 70,
+        'rsi_period_exit': 14,
+        'rsi_sell_threshold': 80,
+        'contribution_amount': 10000,
+        'contribution_fee': 1
+    };
+
+    for (const [id, val] of Object.entries(defaults)) {
+        const el = document.getElementById(id);
+        if (el && el.value.trim() === '') {
+            el.value = val;
+            // 若為重點欄位，可選用 Toast 提示
+            // showToast(`欄位 ${id} 已自動填入預設值: ${val}`);
+        }
+    }
+
+    // 針對動態產生的參數 (自定義模式)，若為空則填入 0 或 data-default
+    document.querySelectorAll('.param-input').forEach(inp => {
+        if (inp.value.trim() === '') {
+            inp.value = inp.dataset.default || 0;
+        }
+    });
+
     // 基礎參數
     let payload = {
         ticker: ticker,
@@ -519,11 +554,8 @@ async function executeBacktest() {
         cash: parseFloat(document.getElementById('cash').value),
         buy_fee_pct: parseFloat(document.getElementById('buy_fee').value),
         sell_fee_pct: parseFloat(document.getElementById('sell_fee').value),
-        stop_loss_pct: parseFloat(document.getElementById('sl_pct').value),
-        take_profit_pct: parseFloat(document.getElementById('tp_pct').value),
-        trailing_stop_pct: parseFloat(document.getElementById('ts_pct').value) || 0,
-        stop_loss_pct: parseFloat(document.getElementById('sl_pct').value),
-        take_profit_pct: parseFloat(document.getElementById('tp_pct').value),
+        stop_loss_pct: parseFloat(document.getElementById('sl_pct').value) || 0,
+        take_profit_pct: parseFloat(document.getElementById('tp_pct').value) || 0,
         trailing_stop_pct: parseFloat(document.getElementById('ts_pct').value) || 0,
         strategy_mode: currentMode
     };
@@ -588,7 +620,21 @@ async function executeBacktest() {
 
         if (!res.ok) {
             const err = await res.json();
-            throw new Error(err.detail || "請求失敗");
+            let msg = "請求失敗";
+            if (err.detail) {
+                if (typeof err.detail === 'string') {
+                    msg = err.detail;
+                } else if (Array.isArray(err.detail)) {
+                    // Pydantic validation errors
+                    msg = err.detail.map(e => {
+                        const field = e.loc && e.loc.length > 0 ? e.loc[e.loc.length - 1] : '欄位';
+                        return `${field} - ${e.msg}`;
+                    }).join(' | ');
+                } else {
+                    msg = JSON.stringify(err.detail);
+                }
+            }
+            throw new Error(msg);
         }
 
         const data = await res.json();
